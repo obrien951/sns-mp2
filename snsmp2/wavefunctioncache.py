@@ -183,10 +183,15 @@ class WavefunctionCache(object):
         assert (oldcalc.B, oldcalc.Z) != (newcalc.B, newcalc.Z)
 
         read_filename = self._fmt_mo_fn(oldcalc)
-        data = np.load(read_filename)
-        Ca_occ = core.Matrix.np_read(data, "Ca_occ")
-        Cb_occ = core.Matrix.np_read(data, "Cb_occ")
-        puream = int(data["BasisSet PUREAM"])
+        new_wfn = core.Wavefunction.from_file(read_filename)
+
+#        data = np.load(read_filename)
+#        Ca_occ = core.Matrix.np_read(data, "Ca_occ")
+#        Ca_occ = core.Matrix.np_read(data, "Ca_occ")
+        Ca_occ = new_wfn.Ca_subset("AO","OCC")
+        Cb_occ = new_wfn.Cb_subset("AO","OCC")
+#        puream = int(data["BasisSet PUREAM"])
+        puream=new_wfn.basisset().has_puream()
 
         old_molecule = self.molecule(oldcalc)
         with psiopts('BASIS %s' % self.basis_sets[oldcalc.Z]):
@@ -206,8 +211,10 @@ class WavefunctionCache(object):
             else:
                 base_wfn = core.Wavefunction(new_molecule, new_basis)
 
-        nalphapi = core.Dimension.from_list(data["nalphapi"])
-        nbetapi = core.Dimension.from_list(data["nbetapi"])
+#        nalphapi = core.Dimension.from_list(data["nalphapi"])
+        nalphapi = new_wfn.nalphapi()
+#        nbetapi = core.Dimension.from_list(data["nbetapi"])
+        nbetapi = new_wfn.nbetapi()
         pCa = base_wfn.basis_projection(Ca_occ, nalphapi, old_basis, new_basis)
         pCb = base_wfn.basis_projection(Cb_occ, nbetapi, old_basis, new_basis)
 
@@ -236,15 +243,20 @@ class WavefunctionCache(object):
         # type: (calcid,) -> str
         # Path to the molecular orbital file for a calc.
         fname = os.path.split(os.path.abspath(core.get_writer_file_prefix(self.fmt_ns(calc))))[1]
-        return "%s.%s.npz" % (fname, psif.PSIF_SCF_MOS)
+        return "%s.%s.npy" % (fname, psif.PSIF_SCF_MOS)
 
     def _init_addghost_C(self, oldcalc, calc):
         # print('Adding ghost %s->%s' % (oldcalc, calc))
 
         old_filename = self._fmt_mo_fn(oldcalc)
-        data = np.load(old_filename)
-        Ca_occ = core.Matrix.np_read(data, "Ca_occ")
-        Cb_occ = core.Matrix.np_read(data, "Cb_occ")
+#        data = np.load(old_filename)
+        new_wfn = core.Wavefunction.from_file(old_filename)
+        Ca_occ = new_wfn.Ca_subset("AO","OCC")
+        Cb_occ = new_wfn.Cb_subset("AO","OCC")
+#        puream = int(data["BasisSet PUREAM"])
+        puream=new_wfn.basisset().has_puream()
+        #Ca_occ = core.Matrix.np_read(data, "Ca_occ")
+        #Cb_occ = core.Matrix.np_read(data, "Cb_occ")
 
         m1_nso = self.wfn_cache[('m1', 'm', oldcalc.Z)].nso()
         m2_nso = self.wfn_cache[('m2', 'm', oldcalc.Z)].nso()
@@ -265,13 +277,16 @@ class WavefunctionCache(object):
             Cb_occ_d = core.Matrix('Cb_occ', (m1_nso + m2_nso), m2_nbeta)
             Cb_occ_d.np[-m2_nso:, :] = Cb_occ.np[:, :]
 
-        data_dict = dict(data)
-        data_dict.update(Ca_occ_d.np_write(prefix='Ca_occ'))
-        data_dict.update(Cb_occ_d.np_write(prefix='Cb_occ'))
+#        data_dict = dict(data)
+#        data_dict.update(Ca_occ_d.np_write(prefix='Ca_occ'))
+#        data_dict.update(Cb_occ_d.np_write(prefix='Cb_occ'))
+        new_wfn.set_array_variable("CA_OCC", Ca_occ_d)
+        new_wfn.set_array_variable("CB_OCC", Cb_occ_d)
 
         psi_scratch = core.IOManager.shared_object().get_default_path()
-        write_filename = os.path.join(psi_scratch, os.path.split(os.path.abspath(core.get_writer_file_prefix(self.fmt_ns(calc))))[1] + ".180.npz")
-        np.savez(write_filename, **data_dict)
+        write_filename = os.path.join(psi_scratch, os.path.split(os.path.abspath(core.get_writer_file_prefix(self.fmt_ns(calc))))[1] + ".180.npy")
+        new_wfn.to_file(write_filename)
+#        np.savez(write_filename, **data_dict)
         extras.register_numpy_file(write_filename)
         core.set_local_option('SCF', 'GUESS', 'READ')
 
@@ -282,12 +297,18 @@ class WavefunctionCache(object):
 
         m1_C_fn = self._fmt_mo_fn(oldcalc_m1)
         m2_C_fn = self._fmt_mo_fn(oldcalc_m2)
-        m1_data = np.load(m1_C_fn)
-        m2_data = np.load(m2_C_fn)
-        m1_Ca_occ = core.Matrix.np_read(m1_data, "Ca_occ")
-        m1_Cb_occ = core.Matrix.np_read(m1_data, "Cb_occ")
-        m2_Ca_occ = core.Matrix.np_read(m2_data, "Ca_occ")
-        m2_Cb_occ = core.Matrix.np_read(m2_data, "Cb_occ")
+#        m1_data = np.load(m1_C_fn)
+        m1_wfn = core.Wavefunction.from_file(m1_C_fn)
+        m2_wfn = core.Wavefunction.from_file(m2_C_fn)
+#        m2_data = np.load(m2_C_fn)
+        m1_Ca_occ = m1_wfn.Ca_subset("AO","OCC")
+        m2_Ca_occ = m2_wfn.Ca_subset("AO","OCC")
+        m1_Cb_occ = m1_wfn.Cb_subset("AO","OCC")
+        m2_Cb_occ = m2_wfn.Cb_subset("AO","OCC")
+#        m1_Ca_occ = core.Matrix.np_read(m1_data, "Ca_occ")
+#        m1_Cb_occ = core.Matrix.np_read(m1_data, "Cb_occ")
+#        m2_Ca_occ = core.Matrix.np_read(m2_data, "Ca_occ")
+#        m2_Cb_occ = core.Matrix.np_read(m2_data, "Cb_occ")
 
         m1_nso, m1_nalpha = m1_Ca_occ.shape
         m2_nso, m2_nalpha = m2_Ca_occ.shape
@@ -304,6 +325,11 @@ class WavefunctionCache(object):
         d_Cb_occ.np[:, :m1_nbeta] = m1_Cb_occ.np[:, :]
         d_Cb_occ.np[:, -m2_nbeta:] = m2_Cb_occ.np[:, :]
 
+        dimer_dict = {}
+        dimer_dict['matrix'] = {}
+        dimer_dict['matrix']['Ca']=d_Ca_occ
+        dimer_dict['matrix']['Cb']=d_Cb_occ
+
         assert m1_data['symmetry'] == m2_data['symmetry'] == 'c1'
         assert m1_data['reference'] == m2_data['reference']
         assert m1_data['BasisSet'] == m2_data['BasisSet']
@@ -319,11 +345,25 @@ class WavefunctionCache(object):
             'BasisSet': m1_data['BasisSet'],
             'BasisSet PUREAM': m1_data['BasisSet PUREAM'],
         }
+        dimer_dict['dimension']={}
+        dimer_dict['dimension']['ndoccpi']= m1_wfn.ndoccpi() +m2_wfn.ndoccpi() 
+        dimer_dict['dimension']['nsoccpi']= m1_wfn.nsoccpi() +m2_wfn.nsoccpi() 
+        dimer_dict['dimension']['nalphapi']= m1_wfn.nalphapi() +m2_wfn.nalphapi() 
+        dimer_dict['dimension']['nbetapi']= m1_wfn.nbetapi() +m2_wfn.nbetapi() 
+
+
+        dimer_dict['string'] = {}
+        dimer_dict['string']['basisname']= m1_wfn.basisset().name()
+        dimer_dict['boolean']={}
+        dimer_dict['boolean']['basispuream']= m1_wfn.basisset().has_puream()
 
         data.update(d_Ca_occ.np_write(prefix='Ca_occ'))
         data.update(d_Cb_occ.np_write(prefix='Cb_occ'))
+#        np.savez(m1_C_fn, **data)
+
         m1_C_fn = self._fmt_mo_fn(calc)
-        np.savez(m1_C_fn, **data)
+        guess_wfn = core.Wavefunction.from_file(dimer_dict)
+        guess_wfn.to_file(m1_C_fn)
 
         core.set_local_option('SCF', 'GUESS', 'READ')
 
